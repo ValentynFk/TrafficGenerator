@@ -18,11 +18,11 @@ struct Color4d { double mR, mG, mB, mA; };
 
 class BasicFrame {
 public:
-    BasicFrame(size_t x, size_t y, size_t width, size_t height)
+    BasicFrame(size_t x, size_t y, size_t width, size_t height) noexcept
         : mX(x), mY(y), mWidth(width), mHeight(height) {
     }
-    BasicFrame(const BasicFrame & basicFrame) = default;
-    BasicFrame(BasicFrame && basicFrame)      = default;
+    BasicFrame(const BasicFrame & basicFrame) noexcept = default;
+    BasicFrame(BasicFrame && basicFrame)      noexcept = default;
 protected:
     const size_t mX, mY;
     const size_t mWidth, mHeight;
@@ -30,6 +30,7 @@ protected:
 
 template <class Value_t>
 class Plot : public BasicFrame {
+    using CurveId_t = size_t;
     struct Curve {
         std::vector<Value_t> mData;
         std::string          mName;
@@ -37,10 +38,10 @@ class Plot : public BasicFrame {
         double               mWidth;
         unsigned short int   mPattern;
         Curve() = default;
-    }; std::unordered_map<size_t, Curve> mCurves;
+    }; std::unordered_map<CurveId_t, Curve> mCurves;
 public:
-    explicit Plot(const BasicFrame & baseFrame)
-        : BasicFrame(baseFrame) {
+    explicit Plot(const BasicFrame & baseFrame) noexcept
+        : BasicFrame(baseFrame){
     };
 
     template <class S1, class D1,
@@ -49,7 +50,7 @@ public:
             >::type, typename = typename std::enable_if<
                     std::is_convertible<D1, std::vector<Value_t>>::value
             >::type>
-    size_t addCurve(S1&& curveName, D1&& curveData, const std::string & curvePattern) {
+    CurveId_t addCurve(S1&& curveName, D1&& curveData, const std::string & curvePattern) {
         // Append curve
         Curve newCurve;
         newCurve.mName    = std::forward<S1>(curveName);
@@ -78,7 +79,7 @@ public:
             typename = typename std::enable_if<
                     std::is_convertible<D1, std::vector<Value_t>>::value
             >::type>
-    void updateCurve(D1&& curveUpdatedData, const size_t curveId = 0) {
+    void updateCurve(D1&& curveUpdatedData, const CurveId_t curveId = 0) {
         if (mCurves.find(curveId) != mCurves.end()) {
             mCurves[curveId].mData = std::forward<D1>(curveUpdatedData);
             // Update curves shared maximum and length
@@ -100,9 +101,9 @@ public:
     void draw(const std::string & vLabel, const std::string & hLabel, size_t hLinesNum = 1);
 
 private:
-    Value_t mCurvesTotalMax = 0;
-    size_t  mCurvesTotalLen = 0;
-    size_t  mLastCurveId    = 0;
+    Value_t   mCurvesTotalMax = 0;
+    size_t    mCurvesTotalLen = 0;
+    CurveId_t mLastCurveId    = 0;
 
     template <typename Numeric_t,
             typename = typename std::enable_if<
@@ -197,7 +198,6 @@ void Plot<Value_t>::draw(
     glEnable(GL_LINE_STIPPLE);
     for(const auto & keyCurveRelation : mCurves) {
         const Curve currentCurve = keyCurveRelation.second;
-        std::cout << "go through curve: " << currentCurve.mName << std::endl;
         glLineStipple(1, currentCurve.mPattern);
         glLineWidth(currentCurve.mWidth);
         glColor4d(currentCurve.mColorR,

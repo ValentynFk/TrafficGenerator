@@ -6,6 +6,8 @@
 #include <algorithm>
 #include "plot.h"
 
+static bool processPaused{ false };
+
 const struct {
     // Constant global dataset with application' global
     // parameters is to be used everywhere
@@ -20,42 +22,19 @@ const struct {
     20, 20, 640, 480, 0
 };
 
-template <typename Value_t>
-static void drawPlot(
-        const uint16_t & x,
-        const uint16_t & y,
-        const float & width,
-        const float & height,
-        const std::vector<Value_t> & values);
-
-template <typename Value_t>
-static void drawPlot3Curves(
-        const uint16_t & x,
-        const uint16_t & y,
-        const float & width,
-        const float & height,
-        const std::vector<Value_t> & values1,
-        const std::vector<Value_t> & values2,
-        const std::vector<Value_t> & values3);
-
-
-bool processPaused{ false };
-
+enum Service : int {
+    DataService,
+    VoiceService,
+    VideoService
+};
 struct ServiceParameters {
     unsigned mPacketLen = 0;
     double   mIntensity = 0;
     double   mFraction  = 0;
 };
 
-enum Service : int {
-    DataService,
-    VoiceService,
-    VideoService,
-    CustomService
-};
-std::unordered_map<Service, double> gProbabilities;
-std::unordered_map<Service, double> gPacketLengths;
-std::unordered_map<Service, double> gIntensities;
+std::unordered_map<Service, std::vector<double>> gTraffics;
+std::unordered_map<Service, size_t>              gCurvesId;
 
 std::unordered_map<Service, ServiceParameters> gParamsOfServices;
 
@@ -65,8 +44,8 @@ unsigned long int gDurationSeconds;
 std::vector<double> generateTraffic(ServiceParameters serviceParams);
 std::vector<double> combineTraffic(std::unordered_map<Service, std::vector<double>> allTraffic);
 const BasicFrame gcStatisticsPlotFrame{10, 220, 620, 200};
-const BasicFrame gcTrafficPlotFrame{10, 10, 620, 200};
-Plot<double> gTrafficPlot(gcTrafficPlotFrame);
+
+Plot<double> gTrafficPlot(BasicFrame{10, 10, 620, 200});
 
 static void display()
 {
@@ -75,7 +54,6 @@ static void display()
     static std::unordered_map<Service, std::vector<double>> allTraffic;
     static Plot<size_t> statisticsPlot(gcStatisticsPlotFrame);
     static size_t firstCurveId;
-    static size_t secondCurveId;
     static bool isInitCycle = true;
 
     if (isInitCycle) {
@@ -86,72 +64,32 @@ static void display()
         isInitCycle = false;
     }
 
-    //static std::vector<std::pair<ServiceParameters, std::vector<double>>> allTraffic;
-
     if (!processPaused)
     {
-        allTraffic[Service::DataService]  = generateTraffic(gParamsOfServices[Service::DataService]);
-        allTraffic[Service::VideoService] = generateTraffic(gParamsOfServices[Service::VideoService]);
-        allTraffic[Service::VoiceService] = generateTraffic(gParamsOfServices[Service::VoiceService]);
+        gTraffics[Service::DataService] = generateTraffic(gParamsOfServices[Service::DataService]);
+        gTraffics[Service::VoiceService] = generateTraffic(gParamsOfServices[Service::VoiceService]);
+        gTraffics[Service::VideoService] = generateTraffic(gParamsOfServices[Service::VideoService]);
+
         gParamsOfServices[Service::DataService].mIntensity += 0.1;
 
-        std::vector<double> totalTraffic = allTraffic[Service::DataService];
-        std::vector<size_t> stat(100, 0);
+        std::vector<size_t> dataTrafficStatistics(100, 0);
         std::vector<size_t> something(300, 500);
-        std::for_each(totalTraffic.cbegin(), totalTraffic.cend(),
-                      [&stat] (const size_t & intensity)
+        std::for_each(gTraffics[Service::DataService].cbegin(), gTraffics[Service::DataService].cend(),
+                      [&dataTrafficStatistics] (const size_t & intensity)
                       {
-                          if (intensity < stat.size())
+                          if (intensity < dataTrafficStatistics.size())
                           {
-                              ++stat[intensity];
+                              ++dataTrafficStatistics[intensity];
                           }
                       });
-        statisticsPlot.updateCurve(stat);
-        std::cout << "first curve id: " << firstCurveId << ", second curve id: " << secondCurveId << std::endl;
+        statisticsPlot.updateCurve(dataTrafficStatistics);
+        gTrafficPlot.updateCurve(gTraffics[Service::DataService],  gCurvesId[Service::DataService]);
+        gTrafficPlot.updateCurve(gTraffics[Service::VoiceService], gCurvesId[Service::VoiceService]);
+        gTrafficPlot.updateCurve(gTraffics[Service::VideoService], gCurvesId[Service::VideoService]);
     }
 
     statisticsPlot.draw("N occurrences", "intensity", 10);
     gTrafficPlot.draw("Intensity", "time", 4);
-
-/*
-    glColor3d(0.88, 0.15, 0.35);
-    // Draw total traffic as well as each traffic type separately
-    //drawPlot(10, 220, 620, 200, allTraffic[Service::DataService]);//combineTraffic(allTraffic));
-    std::string horizontalLabel{"intensity"};
-    std::string verticalLabel  {"time"};
-    render3CurvePlot(10, 10, 620, 200,
-                     horizontalLabel, verticalLabel,
-                     allTraffic[Service::DataService],    // red curve
-                     allTraffic[Service::VideoService],   // dashed curve
-                     allTraffic[Service::VoiceService]);  // dotted curve);
-*/
-    /*
-    Plot<double> plot(std::vector<double>({1, 2, 3, 4, 5, 6, 9, 1, 1, 12.1664434, 9, 8, 7, 6}),
-                      BasicFrame(10,330,200,100));
-    glColor4d(0.88, 0.15, 0.35, 1);
-    plot.draw("intensity", "time");
-    */
-    /*
-
-    glColor3f(0.0f, 0.0f, 0.0f);
-    glBegin(GL_LINES);
-    glVertex2f(190, 230);
-    glVertex2f(210, 230);
-    glVertex2f(200, 220);
-    glVertex2f(200, 240);
-    glEnd();
-
-
-    glColor3f(1.0f, 0.0f, 0.0f);
-    renderStrokeText("center highlighted", 200, 230, angle, 1.5f, 0.9f, ALIGN_H_RIGHT | ALIGN_V_UP | HIGHLIGHT_TEXT);
-    */
-    /*
-    renderHorizontalStrokeText("right top", 200, 230, 1.5f, 0.9f, ALIGN_H_RIGHT | ALIGN_V_UP);
-    renderHorizontalStrokeText("right bottom", 200, 230, 1.5f, 0.9f, ALIGN_H_RIGHT | ALIGN_V_DOWN);
-    renderHorizontalStrokeText("left top", 200, 230, 1.5f, 0.9f, ALIGN_H_LEFT | ALIGN_V_UP);
-    renderHorizontalStrokeText("left bottom", 200, 230, 1.5f, 0.9f, ALIGN_H_LEFT | ALIGN_V_DOWN);
-    renderHorizontalStrokeText("center highlighted", 200, 230, 1.5f, 0.9f, ALIGN_H_CENTER | ALIGN_V_CENTER | HIGHLIGHT_TEXT);
-    */
 
     glFlush();
     glutSwapBuffers();
@@ -192,7 +130,7 @@ static void customInit()
 
     // Fill duration and terminals
     gTerminalsCount  = 1;
-    gDurationSeconds = 7000;
+    gDurationSeconds = 400;
 
     ServiceParameters dataServiceParams;
     dataServiceParams.mIntensity = 1;
@@ -201,20 +139,23 @@ static void customInit()
     gParamsOfServices[Service::DataService] = dataServiceParams;
 
     ServiceParameters voiceServiceParams;
-    voiceServiceParams.mIntensity = 2140;
+    voiceServiceParams.mIntensity = 140;
     voiceServiceParams.mPacketLen = 1000;
     voiceServiceParams.mFraction  = 0.5;
     gParamsOfServices[Service::VoiceService] = voiceServiceParams;
 
     ServiceParameters videoServiceParams;
-    videoServiceParams.mIntensity = 7000;
+    videoServiceParams.mIntensity = 300;
     videoServiceParams.mPacketLen = 300;
     videoServiceParams.mFraction  = 0.4;
     gParamsOfServices[Service::VideoService] = videoServiceParams;
 
-    gTrafficPlot.addCurve("Data service", std::vector<double>(), "");
-    gTrafficPlot.addCurve("Data service", std::vector<double>(), "");
-    gTrafficPlot.addCurve("Data service", std::vector<double>(), "");
+    glColor3d(0.88, 0.15, 0.23);
+    gCurvesId[Service::DataService]  = gTrafficPlot.addCurve("Data service", std::vector<double>(), "1111111111111111");
+    glColor3d(0.15, 0.92, 0.33);
+    gCurvesId[Service::VoiceService] = gTrafficPlot.addCurve("Voice service", std::vector<double>(), "0011001100110011");
+    glColor3d(0.21, 0.21, 0.21);
+    gCurvesId[Service::VideoService] = gTrafficPlot.addCurve("Video service", std::vector<double>(), "1100110011001100");
 }
 
 int main(int argc, char **argv)
@@ -239,203 +180,6 @@ int main(int argc, char **argv)
     glutMainLoop();
 
     return EXIT_SUCCESS;
-}
-
-
-
-
-template <typename Value_t>
-static void drawPlot(
-        const uint16_t & x,
-        const uint16_t & y,
-        const float & width,
-        const float & height,
-        const std::vector<Value_t> & values)
-{
-    if (values.empty()) return;
-
-    glPushMatrix();
-    glEnable(GL_LINE_SMOOTH);
-    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    // draw plot background
-    glColor3f(0.98, 0.98, 0.98);
-    glBegin(GL_QUADS);
-    glVertex2f(x, y);
-    glVertex2f(x, y + height);
-    glVertex2f(x + width, y + height);
-    glVertex2f(x + width, y);
-    glEnd();
-
-    // draw plot borders
-    glLineWidth(0.5);
-    glColor3f(0.75, 0.75, 0.75);
-    glBegin(GL_LINE_LOOP);
-    glVertex2f(x, y);
-    glVertex2f(x, y + height);
-    glVertex2f(x + width, y + height);
-    glVertex2f(x + width, y);
-    glEnd();
-
-    const Value_t maxValue{ *std::max_element(values.cbegin(), values.cend()) };
-
-    // draw plot axes
-    glLineWidth(1.2);
-    glColor3f(0.1, 0.1, 0.1);
-    glBegin(GL_LINES);
-    glVertex2f(x, y);
-    glVertex2f(x, y + height);
-    glVertex2f(x, y);
-    glVertex2f(x + width, y);
-    glEnd();
-
-    // draw vertical axis arrow
-    glBegin(GL_POLYGON);
-    glVertex2f(float(x)-2.5, y + height - 5);
-    glVertex2f(x, y + height);
-    glVertex2f(float(x)+2.5, y + height - 5);
-    glEnd();
-
-    // draw horizontal axis arrow
-    glBegin(GL_POLYGON);
-    glVertex2f(x + width - 5, float(y)-2.5);
-    glVertex2f(x + width, y);
-    glVertex2f(x + width - 5, float(y)+2.5);
-    glEnd();
-
-    // draw curve
-    glLineWidth(1.2);
-    glColor3f(0.88, 0.11, 0.23);
-    glBegin(GL_LINE_STRIP);
-    const float stepX{ width / float(values.size()) };
-    const float stepY{ height / float(maxValue)};
-    decltype(values.size()) pos{ 0 };
-    for (const auto & value : values) {
-        glVertex2f(x + stepX/float(2) + stepX*pos++, y + stepY*float(value));
-    }
-    glEnd();
-
-    glLineWidth(1.0f);
-    glDisable(GL_BLEND);
-    glDisable(GL_LINE_SMOOTH);
-    glPopMatrix();
-}
-
-template <typename Value_t>
-static void drawPlot3Curves(
-        const uint16_t & x,
-        const uint16_t & y,
-        const float & width,
-        const float & height,
-        const std::vector<Value_t> & values1,
-        const std::vector<Value_t> & values2,
-        const std::vector<Value_t> & values3)
-{
-    if (values1.empty() || values2.empty() || values3.empty()) return;
-
-    glPushMatrix();
-    glPushAttrib(GL_ENABLE_BIT);
-    glEnable(GL_LINE_STIPPLE);
-    glEnable(GL_LINE_SMOOTH);
-    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    // draw plot background
-    glColor3f(0.98, 0.98, 0.98);
-    glBegin(GL_QUADS);
-    glVertex2f(x, y);
-    glVertex2f(x, y + height);
-    glVertex2f(x + width, y + height);
-    glVertex2f(x + width, y);
-    glEnd();
-
-    // draw plot borders
-    glLineWidth(0.5);
-    glLineStipple(1, 0xFFFF);
-    glColor3f(0.75, 0.75, 0.75);
-    glBegin(GL_LINE_LOOP);
-    glVertex2f(x, y);
-    glVertex2f(x, y + height);
-    glVertex2f(x + width, y + height);
-    glVertex2f(x + width, y);
-    glEnd();
-
-    const Value_t maxValue{ std::max({
-        *std::max_element(values1.cbegin(), values1.cend()),
-        *std::max_element(values2.cbegin(), values2.cend()),
-        *std::max_element(values3.cbegin(), values3.cend())
-    }) };
-    // draw plot axes
-    glLineWidth(0.6);
-    glColor4f(0.1, 0.1, 0.1, 0.5);
-    glBegin(GL_LINES);
-    glVertex2f(x, y);
-    glVertex2f(x, y + height);
-    glVertex2f(x, y);
-    glVertex2f(x + width, y);
-    glEnd();
-
-    // draw vertical axis arrow
-    glBegin(GL_POLYGON);
-    glVertex2f(float(x)-2.5, y + height - 5);
-    glVertex2f(x, y + height);
-    glVertex2f(float(x)+2.5, y + height - 5);
-    glEnd();
-
-    // draw horizontal axis arrow
-    glBegin(GL_POLYGON);
-    glVertex2f(x + width - 5, float(y)-2.5);
-    glVertex2f(x + width, y);
-    glVertex2f(x + width - 5, float(y)+2.5);
-    glEnd();
-
-    // calculate parameters of the curves
-    const decltype(values1.size()) maxSize{ std::max({
-        values1.size(),
-        values2.size(),
-        values3.size()
-    }) };
-    const float stepX{ float(width) / float(maxSize) };
-    const float stepY{ float(height) / float(maxValue)};
-    // draw curves
-    // first curve (red)
-    glLineWidth(1.2);
-    glLineStipple(1, 0xFFFF);
-    glColor3f(0.88, 0.11, 0.23);
-    glBegin(GL_LINE_STRIP);
-    decltype(values1.size()) pos{ 0 };
-    for (const auto & value : values1) {
-        glVertex2f(x + stepX/float(2) + stepX*pos++, y + stepY*float(value));
-    }
-    glEnd();
-    // second curve (black dashed)
-    glLineStipple(1, 0xF0F0);
-    glColor3f(0.0, 0.0, 0.0);
-    glBegin(GL_LINE_STRIP);
-    pos = 0;
-    for (const auto & value : values2) {
-        glVertex2f(x + stepX/float(2) + stepX*pos++, y + stepY*float(value));
-    }
-    glEnd();
-    // third curve (black dotted)
-    glLineStipple(1, 0x3333);
-    glColor3f(0.0, 0.0, 0.0);
-    glBegin(GL_LINE_STRIP);
-    pos = 0;
-    for (const auto & value : values3) {
-        glVertex2f(x + stepX/float(2) + stepX*pos++, y + stepY*float(value));
-    }
-    glEnd();
-
-    glLineWidth(1.0f);
-    glDisable(GL_BLEND);
-    glDisable(GL_LINE_SMOOTH);
-    glDisable(GL_LINE_STIPPLE);
-    glPopAttrib();
-    glPopMatrix();
 }
 
 std::vector<double> generateTraffic(ServiceParameters serviceParams) {
