@@ -6,10 +6,15 @@
 #include <GL/freeglut.h>
 #include <GL/glu.h>
 
+#include <unordered_map>
+#include <iostream>
 #include <algorithm>
 #include <sstream>
 #include <vector>
 #include <string>
+#include <bitset>
+
+struct Color4d { double mR, mG, mB, mA; };
 
 class BasicFrame {
 public:
@@ -25,29 +30,79 @@ protected:
 
 template <class Value_t>
 class Plot : public BasicFrame {
+    struct Curve {
+        std::vector<Value_t> mData;
+        std::string          mName;
+        double               mColorR, mColorG, mColorB, mColorA;
+        double               mWidth;
+        unsigned short int   mPattern;
+        Curve() = default;
+    }; std::unordered_map<size_t, Curve> mCurves;
 public:
+    explicit Plot(const BasicFrame & baseFrame)
+        : BasicFrame(baseFrame) {
+    };
+
+    template <class S1, class D1,
+            typename = typename std::enable_if<
+                    std::is_convertible<S1, std::string>::value
+            >::type, typename = typename std::enable_if<
+                    std::is_convertible<D1, std::vector<Value_t>>::value
+            >::type>
+    size_t addCurve(S1&& curveName, D1&& curveData, const std::string & curvePattern) {
+        // Append curve
+        Curve newCurve;
+        newCurve.mName    = std::forward<S1>(curveName);
+        newCurve.mData    = std::forward<D1>(curveData);
+        newCurve.mPattern = std::bitset<16>(curvePattern).to_ulong();
+        double curveColor[4]; // Embed color of the curve from current color
+        glGetDoublev(GL_CURRENT_COLOR, curveColor);
+        newCurve.mColorR = curveColor[0];
+        newCurve.mColorG = curveColor[1];
+        newCurve.mColorB = curveColor[2];
+        newCurve.mColorA = curveColor[3];
+        double curveWidth[1]; // Embed width of the curve from current width
+        glGetDoublev(GL_LINE_WIDTH, curveWidth);
+        newCurve.mWidth = curveWidth[0];
+        mCurves.emplace(mLastCurveId, newCurve);
+        // Update curves shared maximum and length
+        auto pCurrentCurveMax = std::max_element(curveData.cbegin(), curveData.cend());
+        if (pCurrentCurveMax != curveData.cend()) {
+            mCurvesTotalMax = (*pCurrentCurveMax > mCurvesTotalMax) ? *pCurrentCurveMax : mCurvesTotalMax;
+        }
+        mCurvesTotalLen = (curveData.size() > mCurvesTotalLen)? curveData.size() : mCurvesTotalLen;
+        return mLastCurveId++;
+    }
+
     template <class D1,
             typename = typename std::enable_if<
                     std::is_convertible<D1, std::vector<Value_t>>::value
-                    >::type>
-    explicit Plot(D1&& initData, const BasicFrame & baseFrame)
-        : mData(std::forward<D1>(initData)), BasicFrame(baseFrame) {
-        auto pDataMaximum = std::max_element(mData.cbegin(), mData.cend());
-        mDataMaximum = (pDataMaximum != mData.cend())? *pDataMaximum : 0;
-    };
-
-    template <class D1>
-    void update(D1&& newData) {
-        mData = std::forward<D1>(newData);
-        auto pDataMaximum = std::max_element(mData.cbegin(), mData.cend());
-        mDataMaximum = (pDataMaximum != mData.cend())? *pDataMaximum : 0;
+            >::type>
+    void updateCurve(D1&& curveUpdatedData, const size_t curveId = 0) {
+        if (mCurves.find(curveId) != mCurves.end()) {
+            mCurves[curveId].mData = std::forward<D1>(curveUpdatedData);
+            // Update curves shared maximum and length
+            mCurvesTotalMax = 0;
+            mCurvesTotalLen = 0;
+            for (const auto & curve : mCurves) {
+                auto pCurrentCurveMax =
+                        std::max_element(curve.second.mData.cbegin(), curve.second.mData.cend());
+                if (pCurrentCurveMax != curve.second.mData.cend()) {
+                    mCurvesTotalMax = (*pCurrentCurveMax > mCurvesTotalMax) ?
+                            *pCurrentCurveMax : mCurvesTotalMax;
+                }
+                mCurvesTotalLen = (curve.second.mData.size() > mCurvesTotalLen) ?
+                        curve.second.mData.size() : mCurvesTotalLen;
+            }
+        }
     }
 
     void draw(const std::string & vLabel, const std::string & hLabel, size_t hLinesNum = 1);
 
 private:
-    std::vector<Value_t> mData;
-    Value_t mDataMaximum;
+    Value_t mCurvesTotalMax = 0;
+    size_t  mCurvesTotalLen = 0;
+    size_t  mLastCurveId    = 0;
 
     template <typename Numeric_t,
             typename = typename std::enable_if<
@@ -66,9 +121,12 @@ void Plot<Value_t>::draw(
         const std::string & vLabel,
         const std::string & hLabel,
         const size_t hLinesNum) {
+    if (mCurves.empty()) {
+        return;
+    }/*
     if (mData.size() < 2) {
         return;
-    }
+    }*/
 
     const size_t vTextHeight{10};
     const size_t hTextHeight{15};
@@ -84,6 +142,7 @@ void Plot<Value_t>::draw(
     ///                                                                            <DRAWING_SECTION>
     //==============================================================================================
     glPushMatrix();
+    glPushAttrib(GL_ENABLE_BIT);
     glEnable(GL_LINE_SMOOTH);
     glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
     glEnable(GL_BLEND);
@@ -117,6 +176,7 @@ void Plot<Value_t>::draw(
         glEnd();
     }
 
+    /*
     // draw the curve
     glLineWidth(1.2);
     glColor4d(colorOfCurveBuff[0],
@@ -125,13 +185,36 @@ void Plot<Value_t>::draw(
               colorOfCurveBuff[3]);
     glBegin(GL_LINE_STRIP);
     const double dX{static_cast<double>(width)  / static_cast<double>(mData.size()-1)};
-    const double dY{static_cast<double>(height) / static_cast<double>(mDataMaximum)};
+    const double dY{static_cast<double>(height) / static_cast<double>(mCurvesTotalMax)};
     size_t num = 0;
     std::for_each(mData.cbegin(), mData.cend(),
                   [&num, x, dX, y, dY, this] (const Value_t & val) {
                       glVertex2d(x + dX * num++, y + dY * val);
                   });
     glEnd();
+    */
+
+    glEnable(GL_LINE_STIPPLE);
+    for(const auto & keyCurveRelation : mCurves) {
+        const Curve currentCurve = keyCurveRelation.second;
+        std::cout << "go through curve: " << currentCurve.mName << std::endl;
+        glLineStipple(1, currentCurve.mPattern);
+        glLineWidth(currentCurve.mWidth);
+        glColor4d(currentCurve.mColorR,
+                  currentCurve.mColorG,
+                  currentCurve.mColorB,
+                  currentCurve.mColorA);
+        glBegin(GL_LINE_STRIP);
+        const double dX{static_cast<double>(width)  / static_cast<double>(mCurvesTotalLen-1)};
+        const double dY{static_cast<double>(height) / static_cast<double>(mCurvesTotalMax)};
+        size_t num = 0;
+        std::for_each(currentCurve.mData.cbegin(), currentCurve.mData.cend(),
+                      [&num, x, dX, y, dY, this] (const Value_t & val) {
+                          glVertex2d(x + dX * num++, y + dY * val);
+                      });
+        glEnd();
+    }
+    glDisable(GL_LINE_STIPPLE);
 
     // draw plot axes along with corresponding arrows
     glLineWidth(1.2);
@@ -161,7 +244,7 @@ void Plot<Value_t>::draw(
                      1.8f, 0.7f, ALIGN_H_CENTER | ALIGN_V_DOWN);
 
     if (hLinesNum) {
-        const Value_t vDiff{mDataMaximum / static_cast<Value_t>(hLinesNum)};
+        const Value_t vDiff{mCurvesTotalMax / static_cast<Value_t>(hLinesNum)};
         Value_t lineVal{vDiff};
         const double vDistance{static_cast<double>(height) / static_cast<double>(hLinesNum)};
         double lineY{static_cast<double>(y) + vDistance};
@@ -175,11 +258,12 @@ void Plot<Value_t>::draw(
 
     renderStrokeText(valToStr(0), x, y - 3, 0,
                      1.2f, 0.5f, ALIGN_H_CENTER | ALIGN_V_UP);
-    renderStrokeText(valToStr(mData.size()), x + width, y - 3, 0,
+    renderStrokeText(valToStr(mCurvesTotalLen), x + width, y - 3, 0,
                      1.2f, 0.5f, ALIGN_H_CENTER | ALIGN_V_UP);
 
     glDisable(GL_BLEND);
     glDisable(GL_LINE_SMOOTH);
+    glPopAttrib();
     glPopMatrix();
     //==============================================================================================
     ///                                                                           </DRAWING_SECTION>

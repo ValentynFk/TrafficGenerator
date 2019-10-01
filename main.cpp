@@ -64,14 +64,27 @@ unsigned long int gDurationSeconds;
 
 std::vector<double> generateTraffic(ServiceParameters serviceParams);
 std::vector<double> combineTraffic(std::unordered_map<Service, std::vector<double>> allTraffic);
-static const BasicFrame gcStatisticsPlotFrame{10, 220, 620, 200};
+const BasicFrame gcStatisticsPlotFrame{10, 220, 620, 200};
+const BasicFrame gcTrafficPlotFrame{10, 10, 620, 200};
+Plot<double> gTrafficPlot(gcTrafficPlotFrame);
 
 static void display()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     static std::unordered_map<Service, std::vector<double>> allTraffic;
-    static Plot<size_t> statisticsPlot(std::vector<size_t>({}), gcStatisticsPlotFrame);
+    static Plot<size_t> statisticsPlot(gcStatisticsPlotFrame);
+    static size_t firstCurveId;
+    static size_t secondCurveId;
+    static bool isInitCycle = true;
+
+    if (isInitCycle) {
+        glColor3d(0.88, 0.15, 0.23);
+        firstCurveId = statisticsPlot.addCurve("Statistics",
+                std::vector<size_t>({}),
+                "1111111101010101");
+        isInitCycle = false;
+    }
 
     //static std::vector<std::pair<ServiceParameters, std::vector<double>>> allTraffic;
 
@@ -84,6 +97,7 @@ static void display()
 
         std::vector<double> totalTraffic = allTraffic[Service::DataService];
         std::vector<size_t> stat(100, 0);
+        std::vector<size_t> something(300, 500);
         std::for_each(totalTraffic.cbegin(), totalTraffic.cend(),
                       [&stat] (const size_t & intensity)
                       {
@@ -92,11 +106,15 @@ static void display()
                               ++stat[intensity];
                           }
                       });
-        statisticsPlot.update(stat);
+        statisticsPlot.updateCurve(stat);
+        std::cout << "first curve id: " << firstCurveId << ", second curve id: " << secondCurveId << std::endl;
     }
 
-    glColor3d(0.88, 0.15, 0.35);
     statisticsPlot.draw("N occurrences", "intensity", 10);
+    gTrafficPlot.draw("Intensity", "time", 4);
+
+/*
+    glColor3d(0.88, 0.15, 0.35);
     // Draw total traffic as well as each traffic type separately
     //drawPlot(10, 220, 620, 200, allTraffic[Service::DataService]);//combineTraffic(allTraffic));
     std::string horizontalLabel{"intensity"};
@@ -106,7 +124,7 @@ static void display()
                      allTraffic[Service::DataService],    // red curve
                      allTraffic[Service::VideoService],   // dashed curve
                      allTraffic[Service::VoiceService]);  // dotted curve);
-
+*/
     /*
     Plot<double> plot(std::vector<double>({1, 2, 3, 4, 5, 6, 9, 1, 1, 12.1664434, 9, 8, 7, 6}),
                       BasicFrame(10,330,200,100));
@@ -193,6 +211,10 @@ static void customInit()
     videoServiceParams.mPacketLen = 300;
     videoServiceParams.mFraction  = 0.4;
     gParamsOfServices[Service::VideoService] = videoServiceParams;
+
+    gTrafficPlot.addCurve("Data service", std::vector<double>(), "");
+    gTrafficPlot.addCurve("Data service", std::vector<double>(), "");
+    gTrafficPlot.addCurve("Data service", std::vector<double>(), "");
 }
 
 int main(int argc, char **argv)
