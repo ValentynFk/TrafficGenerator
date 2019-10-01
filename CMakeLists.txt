@@ -16,7 +16,7 @@ set (PROJECT_CODE
         ${PROJECT_CODE}
         customgraphics.cpp
         main.cpp
-        plot.cpp plot.h)
+        plot.cpp plot.h trafficgenerator.h)
 
 add_executable(TrafficGenerator ${PROJECT_CODE} ${PROJECT_LIBRARIES})
 target_link_libraries(TrafficGenerator -lopengl32 -lglew32 -lfreeglut -lglu32)

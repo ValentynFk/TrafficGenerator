@@ -7,14 +7,11 @@
 #include <GL/glu.h>
 
 #include <unordered_map>
-#include <iostream>
 #include <algorithm>
 #include <sstream>
 #include <vector>
 #include <string>
 #include <bitset>
-
-struct Color4d { double mR, mG, mB, mA; };
 
 class BasicFrame {
 public:
@@ -30,31 +27,22 @@ protected:
 
 template <class Value_t>
 class Plot : public BasicFrame {
-    using CurveId_t = size_t;
     struct Curve {
         std::vector<Value_t> mData;
-        std::string          mName;
         double               mColorR, mColorG, mColorB, mColorA;
         double               mWidth;
         unsigned short int   mPattern;
         Curve() = default;
-    }; std::unordered_map<CurveId_t, Curve> mCurves;
+    }; std::unordered_map<std::string, Curve> mCurves;
 public:
     explicit Plot(const BasicFrame & baseFrame) noexcept
         : BasicFrame(baseFrame){
     };
 
-    template <class S1, class D1,
-            typename = typename std::enable_if<
-                    std::is_convertible<S1, std::string>::value
-            >::type, typename = typename std::enable_if<
-                    std::is_convertible<D1, std::vector<Value_t>>::value
-            >::type>
-    CurveId_t addCurve(S1&& curveName, D1&& curveData, const std::string & curvePattern) {
+    void addCurve(const std::string & curveName    = "",
+                  const std::string & curvePattern = "1111111111111111") {
         // Append curve
         Curve newCurve;
-        newCurve.mName    = std::forward<S1>(curveName);
-        newCurve.mData    = std::forward<D1>(curveData);
         newCurve.mPattern = std::bitset<16>(curvePattern).to_ulong();
         double curveColor[4]; // Embed color of the curve from current color
         glGetDoublev(GL_CURRENT_COLOR, curveColor);
@@ -65,23 +53,16 @@ public:
         double curveWidth[1]; // Embed width of the curve from current width
         glGetDoublev(GL_LINE_WIDTH, curveWidth);
         newCurve.mWidth = curveWidth[0];
-        mCurves.emplace(mLastCurveId, newCurve);
-        // Update curves shared maximum and length
-        auto pCurrentCurveMax = std::max_element(curveData.cbegin(), curveData.cend());
-        if (pCurrentCurveMax != curveData.cend()) {
-            mCurvesTotalMax = (*pCurrentCurveMax > mCurvesTotalMax) ? *pCurrentCurveMax : mCurvesTotalMax;
-        }
-        mCurvesTotalLen = (curveData.size() > mCurvesTotalLen)? curveData.size() : mCurvesTotalLen;
-        return mLastCurveId++;
+        mCurves.emplace(curveName, newCurve);
     }
 
     template <class D1,
             typename = typename std::enable_if<
                     std::is_convertible<D1, std::vector<Value_t>>::value
             >::type>
-    void updateCurve(D1&& curveUpdatedData, const CurveId_t curveId = 0) {
-        if (mCurves.find(curveId) != mCurves.end()) {
-            mCurves[curveId].mData = std::forward<D1>(curveUpdatedData);
+    void updateCurve(D1&& curveUpdatedData, const std::string & curveName = "") {
+        if (mCurves.find(curveName) != mCurves.end()) {
+            mCurves[curveName].mData = std::forward<D1>(curveUpdatedData);
             // Update curves shared maximum and length
             mCurvesTotalMax = 0;
             mCurvesTotalLen = 0;
@@ -103,7 +84,6 @@ public:
 private:
     Value_t   mCurvesTotalMax = 0;
     size_t    mCurvesTotalLen = 0;
-    CurveId_t mLastCurveId    = 0;
 
     template <typename Numeric_t,
             typename = typename std::enable_if<
@@ -124,10 +104,7 @@ void Plot<Value_t>::draw(
         const size_t hLinesNum) {
     if (mCurves.empty()) {
         return;
-    }/*
-    if (mData.size() < 2) {
-        return;
-    }*/
+    }
 
     const size_t vTextHeight{10};
     const size_t hTextHeight{15};
@@ -177,27 +154,13 @@ void Plot<Value_t>::draw(
         glEnd();
     }
 
-    /*
-    // draw the curve
-    glLineWidth(1.2);
-    glColor4d(colorOfCurveBuff[0],
-              colorOfCurveBuff[1],
-              colorOfCurveBuff[2],
-              colorOfCurveBuff[3]);
-    glBegin(GL_LINE_STRIP);
-    const double dX{static_cast<double>(width)  / static_cast<double>(mData.size()-1)};
-    const double dY{static_cast<double>(height) / static_cast<double>(mCurvesTotalMax)};
-    size_t num = 0;
-    std::for_each(mData.cbegin(), mData.cend(),
-                  [&num, x, dX, y, dY, this] (const Value_t & val) {
-                      glVertex2d(x + dX * num++, y + dY * val);
-                  });
-    glEnd();
-    */
-
+    // Draw curves
     glEnable(GL_LINE_STIPPLE);
     for(const auto & keyCurveRelation : mCurves) {
         const Curve currentCurve = keyCurveRelation.second;
+        if (currentCurve.mData.empty()) {
+            continue;
+        }
         glLineStipple(1, currentCurve.mPattern);
         glLineWidth(currentCurve.mWidth);
         glColor4d(currentCurve.mColorR,
