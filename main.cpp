@@ -1,11 +1,11 @@
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "hicpp-signed-bitwise"
+#include "trafficgenerator.h"
 #include "customgraphics.h"
 #include <unordered_map>
-#include <iostream>
-#include <random>
-#include <map>
 #include <algorithm>
+#include <iostream>
 #include "plot.h"
-#include "trafficgenerator.h"
 
 static bool processPaused{ false };
 
@@ -64,26 +64,18 @@ static void display()
         gTrafficPlot.updateCurve(gTraffics[Service::VideoService], "Video service");
         gTotalPlot.updateCurve(gCombinedTraffics, "All services");
 
-        std::vector<size_t> dataTrafficStatistics(100, 0);
-        std::for_each(gTraffics[Service::DataService].cbegin(), gTraffics[Service::DataService].cend(),
-                      [&dataTrafficStatistics] (const size_t & intensity)
-                      {
-                          if (intensity < dataTrafficStatistics.size())
+        if (!gCombinedTraffics.empty()) {
+            auto minValue = *std::min_element(gCombinedTraffics.cbegin(), gCombinedTraffics.cend());
+            auto maxValue = *std::max_element(gCombinedTraffics.cbegin(), gCombinedTraffics.cend());
+
+            std::vector<size_t> dataTrafficStatistics(maxValue - minValue + 1, 0);
+            std::for_each(gCombinedTraffics.cbegin(), gCombinedTraffics.cend(),
+                          [&dataTrafficStatistics, minValue] (const size_t & intensity)
                           {
-                              ++dataTrafficStatistics[intensity];
-                          }
-                      });
-        std::vector<size_t> combinedTrafficStatistics(100, 0);
-        std::for_each(gCombinedTraffics.cbegin(), gCombinedTraffics.cend(),
-                      [&combinedTrafficStatistics] (const size_t & intensity)
-                      {
-                          if (intensity < combinedTrafficStatistics.size())
-                          {
-                              ++combinedTrafficStatistics[intensity];
-                          }
-                      });
-        gStatistPlot.updateCurve(dataTrafficStatistics, "Data service statistics");
-        gStatistPlot.updateCurve(combinedTrafficStatistics, "All services statistics");
+                              ++dataTrafficStatistics[intensity - minValue];
+                          });
+            gStatistPlot.updateCurve(dataTrafficStatistics, "All services statistics");
+        }
     }
 
     gStatistPlot.draw("N occurrences", "Intensity, c/s", 7);
@@ -105,7 +97,7 @@ void keyboard(unsigned char key, int x, int y) {
         default:        // other key is pressed
             std::cout << "x: " << x << ", y: " << y << std::endl;
             std::cout << "key: " << key << std::endl;
-            std::cout << "keycode: " << int(key) << std::endl;
+            std::cout << "key-code: " << int(key) << std::endl;
     }
 }
 
@@ -130,7 +122,7 @@ static void customInit()
 
     // Fill duration and terminals
     gTerminalsCount  = 10;
-    gDurationSeconds = 750;
+    gDurationSeconds = 7050;
 
     ServiceParameters dataServiceParams;
     dataServiceParams.mIntensity = 1;
@@ -152,8 +144,6 @@ static void customInit()
 
     glLineWidth(1.2);
 
-    glColor3d(0.88, 0.15, 0.23);
-    gStatistPlot.addCurve("Data service statistics", "1100110011001100");
     glColor3d(0.1, 0.1, 0.1);
     gStatistPlot.addCurve("All services statistics");
 
@@ -206,3 +196,4 @@ std::vector<double> combineTraffic(std::unordered_map<Service, std::vector<doubl
             });
     return combinedTraffic;
 }
+#pragma clang diagnostic pop
