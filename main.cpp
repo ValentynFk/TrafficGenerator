@@ -129,8 +129,8 @@ static void customInit()
     glutPostRedisplay();
 
     // Fill duration and terminals
-    gTerminalsCount  = 1;
-    gDurationSeconds = 1050;
+    gTerminalsCount  = 10;
+    gDurationSeconds = 750;
 
     ServiceParameters dataServiceParams;
     dataServiceParams.mIntensity = 1;

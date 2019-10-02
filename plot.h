@@ -1,11 +1,10 @@
 #ifndef TRAFFICGENERATOR_PLOT_H
 #define TRAFFICGENERATOR_PLOT_H
 
-#include "customgraphics.h"
-
 #include <GL/freeglut.h>
 #include <GL/glu.h>
 
+#include "customgraphics.h"
 #include <unordered_map>
 #include <algorithm>
 #include <sstream>
@@ -40,44 +39,13 @@ public:
     };
 
     void addCurve(const std::string & curveName    = "",
-                  const std::string & curvePattern = "1111111111111111") {
-        // Append curve
-        Curve newCurve;
-        newCurve.mPattern = std::bitset<16>(curvePattern).to_ulong();
-        double curveColor[4]; // Embed color of the curve from current color
-        glGetDoublev(GL_CURRENT_COLOR, curveColor);
-        newCurve.mColorR = curveColor[0];
-        newCurve.mColorG = curveColor[1];
-        newCurve.mColorB = curveColor[2];
-        newCurve.mColorA = curveColor[3];
-        double curveWidth[1]; // Embed width of the curve from current width
-        glGetDoublev(GL_LINE_WIDTH, curveWidth);
-        newCurve.mWidth = curveWidth[0];
-        mCurves.emplace(curveName, newCurve);
-    }
+                  const std::string & curvePattern = "1111111111111111");
 
     template <class D1,
             typename = typename std::enable_if<
                     std::is_convertible<D1, std::vector<Value_t>>::value
             >::type>
-    void updateCurve(D1&& curveUpdatedData, const std::string & curveName = "") {
-        if (mCurves.find(curveName) != mCurves.end()) {
-            mCurves[curveName].mData = std::forward<D1>(curveUpdatedData);
-            // Update curves shared maximum and length
-            mCurvesTotalMax = 0;
-            mCurvesTotalLen = 0;
-            for (const auto & curve : mCurves) {
-                auto pCurrentCurveMax =
-                        std::max_element(curve.second.mData.cbegin(), curve.second.mData.cend());
-                if (pCurrentCurveMax != curve.second.mData.cend()) {
-                    mCurvesTotalMax = (*pCurrentCurveMax > mCurvesTotalMax) ?
-                            *pCurrentCurveMax : mCurvesTotalMax;
-                }
-                mCurvesTotalLen = (curve.second.mData.size() > mCurvesTotalLen) ?
-                        curve.second.mData.size() : mCurvesTotalLen;
-            }
-        }
-    }
+    void updateCurve(D1&& curveUpdatedData, const std::string & curveName = "");
 
     void draw(const std::string & vLabel, const std::string & hLabel, size_t hLinesNum = 1);
 
@@ -96,6 +64,44 @@ private:
         return stream.str();
     }
 };
+
+template<class Value_t>
+void Plot<Value_t>::addCurve(const std::string & curveName, const std::string & curvePattern) {
+    // Append curve
+    Curve newCurve;
+    newCurve.mPattern = std::bitset<16>(curvePattern).to_ulong();
+    double curveColor[4]; // Embed color of the curve from current color
+    glGetDoublev(GL_CURRENT_COLOR, curveColor);
+    newCurve.mColorR = curveColor[0];
+    newCurve.mColorG = curveColor[1];
+    newCurve.mColorB = curveColor[2];
+    newCurve.mColorA = curveColor[3];
+    double curveWidth[1]; // Embed width of the curve from current width
+    glGetDoublev(GL_LINE_WIDTH, curveWidth);
+    newCurve.mWidth = curveWidth[0];
+    mCurves.emplace(curveName, newCurve);
+}
+
+template<class Value_t>
+template <class D1, typename>
+void Plot<Value_t>::updateCurve(D1&& curveUpdatedData, const std::string & curveName) {
+    if (mCurves.find(curveName) != mCurves.end()) {
+        mCurves[curveName].mData = std::forward<D1>(curveUpdatedData);
+        // Update curves shared maximum and length
+        mCurvesTotalMax = 0;
+        mCurvesTotalLen = 0;
+        for (const auto & curve : mCurves) {
+            auto pCurrentCurveMax =
+                    std::max_element(curve.second.mData.cbegin(), curve.second.mData.cend());
+            if (pCurrentCurveMax != curve.second.mData.cend()) {
+                mCurvesTotalMax = (*pCurrentCurveMax > mCurvesTotalMax) ?
+                                  *pCurrentCurveMax : mCurvesTotalMax;
+            }
+            mCurvesTotalLen = (curve.second.mData.size() > mCurvesTotalLen) ?
+                              curve.second.mData.size() : mCurvesTotalLen;
+        }
+    }
+}
 
 template<class Value_t>
 void Plot<Value_t>::draw(

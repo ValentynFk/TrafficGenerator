@@ -15,8 +15,6 @@ std::vector<Numeric_t> generateTraffic(Numeric_t intensity,
 
     // Setup calls distribution
     std::poisson_distribution<> poissonianDistribution(intensity);
-    //std::normal_distribution<> poissonianDistribution{callsPerSecond, 7.0};
-    //std::uniform_real_distribution<> poissonianDistribution{callsPerSecond};
 
     // Generate equilibrium traffic for given terminals
     std::vector<double> traffic(durationSeconds, 0);
